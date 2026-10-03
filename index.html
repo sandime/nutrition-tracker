@@ -299,7 +299,10 @@
 
   <script>
     const USDA_API_KEY = 'DEMO_KEY'; // Get your own from https://fdc.nal.usda.gov/api-guide.html
-    
+
+    // localStorage key scoped to today — yesterday's data won't load
+    const TODAY_KEY = 'nt_' + new Date().toISOString().slice(0, 10);
+
     const goals = {
       protein: { value: 0, goal: 90, unit: 'g', color: '#0ca30c' },
       vitaminD: { value: 0, goal: 2000, unit: 'IU', color: '#fab219' },
@@ -431,37 +434,69 @@
       return nutrients;
     }
     
+    function saveToStorage() {
+      const folate = parseFloat(document.getElementById('folateInput').value) || 0;
+      const water  = parseFloat(document.getElementById('waterInput').value)  || 0;
+      localStorage.setItem(TODAY_KEY, JSON.stringify({ entries, folate, water }));
+    }
+
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem(TODAY_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        (data.entries || []).forEach(e => {
+          entries.push(e);
+          goals.protein.value  += e.nutrients.protein;
+          goals.vitaminD.value += e.nutrients.vitaminD;
+          goals.calcium.value  += e.nutrients.calcium;
+          goals.sodium.value   += e.nutrients.sodium;
+        });
+        if (data.folate) {
+          document.getElementById('folateInput').value = data.folate;
+          goals.folate.value = data.folate;
+        }
+        if (data.water) {
+          document.getElementById('waterInput').value = data.water;
+          goals.water.value = data.water;
+        }
+      } catch (e) { console.error('Failed to restore data', e); }
+    }
+
     function addEntry(foodName, portionStr, grams, nutrients) {
       entries.push({ foodName, portionStr, grams, nutrients, id: Date.now() });
-      
-      goals.protein.value += nutrients.protein;
+
+      goals.protein.value  += nutrients.protein;
       goals.vitaminD.value += nutrients.vitaminD;
-      goals.calcium.value += nutrients.calcium;
-      goals.sodium.value += nutrients.sodium;
-      
+      goals.calcium.value  += nutrients.calcium;
+      goals.sodium.value   += nutrients.sodium;
+
+      saveToStorage();
       updateUI();
     }
-    
+
     function removeEntry(id) {
       const entry = entries.find(e => e.id === id);
       if (entry) {
-        goals.protein.value -= entry.nutrients.protein;
+        goals.protein.value  -= entry.nutrients.protein;
         goals.vitaminD.value -= entry.nutrients.vitaminD;
-        goals.calcium.value -= entry.nutrients.calcium;
-        goals.sodium.value -= entry.nutrients.sodium;
-        
+        goals.calcium.value  -= entry.nutrients.calcium;
+        goals.sodium.value   -= entry.nutrients.sodium;
+
         entries.splice(entries.indexOf(entry), 1);
+        saveToStorage();
         updateUI();
       }
     }
-    
+
     function updateManualNutrients() {
       const folate = parseFloat(document.getElementById('folateInput').value) || 0;
-      const water = parseFloat(document.getElementById('waterInput').value) || 0;
-      
+      const water  = parseFloat(document.getElementById('waterInput').value)  || 0;
+
       goals.folate.value = folate;
-      goals.water.value = water;
-      
+      goals.water.value  = water;
+
+      saveToStorage();
       updateUI();
     }
     
@@ -522,6 +557,7 @@
     }
     
     // Initial UI render
+    loadFromStorage();
     updateUI();
     
     // Allow Enter key on food inputs
