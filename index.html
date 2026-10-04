@@ -596,7 +596,7 @@
       
       try {
         // Step 1: search for the food to get its fdcId
-        const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&api_key=${USDA_API_KEY}`;
+        const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&dataType=Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
         const searchResp = await fetch(searchUrl);
         const searchData = await searchResp.json();
 
