@@ -468,6 +468,14 @@
           <input type="number" id="manualCalcium" min="0" step="1" placeholder="0" />
         </div>
         <div class="nutrient-field">
+          <label>Magnesium (mg)</label>
+          <input type="number" id="manualMagnesium" min="0" step="1" placeholder="0" />
+        </div>
+        <div class="nutrient-field">
+          <label>Potassium (mg)</label>
+          <input type="number" id="manualPotassium" min="0" step="1" placeholder="0" />
+        </div>
+        <div class="nutrient-field">
           <label>Sodium (mg)</label>
           <input type="number" id="manualSodium" min="0" step="1" placeholder="0" />
         </div>
@@ -507,12 +515,14 @@
     const TODAY_KEY = 'nt_' + new Date().toISOString().slice(0, 10);
 
     const goals = {
-      protein: { value: 0, goal: 90, unit: 'g', color: '#0ca30c' },
-      vitaminD: { value: 0, goal: 2000, unit: 'IU', color: '#fab219' },
-      calcium: { value: 0, goal: 1500, unit: 'mg', color: '#1D9E75' },
-      sodium: { value: 0, goal: 1500, unit: 'mg', maxValue: true, color: '#ec835a' },
-      folate: { value: 0, goal: 1, unit: 'mg', color: '#7F77DD' },
-      water: { value: 0, goal: 3, unit: 'L', color: '#378ADD' }
+      protein:   { value: 0, goal: 90,   unit: 'g',  color: '#0ca30c' },
+      vitaminD:  { value: 0, goal: 2000, unit: 'IU', color: '#fab219' },
+      calcium:   { value: 0, goal: 1500, unit: 'mg', color: '#1D9E75' },
+      magnesium: { value: 0, goal: 400,  unit: 'mg', color: '#20a0a0' },
+      potassium: { value: 0, goal: 3000, unit: 'mg', color: '#9b59b6' },
+      sodium:    { value: 0, goal: 1500, unit: 'mg', maxValue: true, color: '#ec835a' },
+      folate:    { value: 0, goal: 1,    unit: 'mg', color: '#7F77DD' },
+      water:     { value: 0, goal: 3,    unit: 'L',  color: '#378ADD' }
     };
     
     const entries = [];
@@ -612,26 +622,19 @@
     
     function extractNutrients(food, grams) {
       const nutrients = {
-        protein: 0,
-        vitaminD: 0,
-        calcium: 0,
-        sodium: 0
+        protein: 0, vitaminD: 0, calcium: 0,
+        magnesium: 0, potassium: 0, sodium: 0,
       };
-      
+
       food.foodNutrients.forEach(nutrient => {
-        const value = nutrient.value || 0;
-        const unitName = nutrient.unitName || '';
-        const per100g = value / 100 * grams;
-        
-        if (nutrient.nutrientName.includes('Protein')) {
-          nutrients.protein += per100g;
-        } else if (nutrient.nutrientName.includes('Calcium')) {
-          nutrients.calcium += per100g;
-        } else if (nutrient.nutrientName.includes('Vitamin D') || nutrient.nutrientName.includes('Vitamin D2') || nutrient.nutrientName.includes('Vitamin D3')) {
-          nutrients.vitaminD += per100g;
-        } else if (nutrient.nutrientName.includes('Sodium')) {
-          nutrients.sodium += per100g;
-        }
+        const per100g = (nutrient.value || 0) / 100 * grams;
+        const n = nutrient.nutrientName;
+        if      (n.includes('Protein'))   nutrients.protein   += per100g;
+        else if (n.includes('Calcium'))   nutrients.calcium   += per100g;
+        else if (n.includes('Magnesium')) nutrients.magnesium += per100g;
+        else if (n.includes('Potassium')) nutrients.potassium += per100g;
+        else if (n.includes('Sodium'))    nutrients.sodium    += per100g;
+        else if (n.includes('Vitamin D')) nutrients.vitaminD  += per100g;
       });
       
       return nutrients;
@@ -648,16 +651,20 @@
         return;
       }
 
-      const protein  = parseFloat(document.getElementById('manualProtein').value)  || 0;
-      const calcium  = parseFloat(document.getElementById('manualCalcium').value)  || 0;
-      const sodium   = parseFloat(document.getElementById('manualSodium').value)   || 0;
+      const protein   = parseFloat(document.getElementById('manualProtein').value)   || 0;
+      const calcium   = parseFloat(document.getElementById('manualCalcium').value)   || 0;
+      const magnesium = parseFloat(document.getElementById('manualMagnesium').value) || 0;
+      const potassium = parseFloat(document.getElementById('manualPotassium').value) || 0;
+      const sodium    = parseFloat(document.getElementById('manualSodium').value)    || 0;
 
-      addEntry(foodName, 'manual', 0, { protein, vitaminD: 0, calcium, sodium });
+      addEntry(foodName, 'manual', 0, { protein, vitaminD: 0, calcium, magnesium, potassium, sodium });
 
-      document.getElementById('manualFoodName').value = '';
-      document.getElementById('manualProtein').value  = '';
-      document.getElementById('manualCalcium').value  = '';
-      document.getElementById('manualSodium').value   = '';
+      document.getElementById('manualFoodName').value    = '';
+      document.getElementById('manualProtein').value     = '';
+      document.getElementById('manualCalcium').value     = '';
+      document.getElementById('manualMagnesium').value   = '';
+      document.getElementById('manualPotassium').value   = '';
+      document.getElementById('manualSodium').value      = '';
     }
 
     function saveToStorage() {
@@ -673,10 +680,12 @@
         const data = JSON.parse(raw);
         (data.entries || []).forEach(e => {
           entries.push(e);
-          goals.protein.value  += e.nutrients.protein;
-          goals.vitaminD.value += e.nutrients.vitaminD;
-          goals.calcium.value  += e.nutrients.calcium;
-          goals.sodium.value   += e.nutrients.sodium;
+          goals.protein.value    += e.nutrients.protein;
+          goals.vitaminD.value   += e.nutrients.vitaminD;
+          goals.calcium.value    += e.nutrients.calcium;
+          goals.magnesium.value  += (e.nutrients.magnesium || 0);
+          goals.potassium.value  += (e.nutrients.potassium || 0);
+          goals.sodium.value     += e.nutrients.sodium;
         });
         if (data.folate) {
           document.getElementById('folateInput').value = data.folate;
@@ -692,10 +701,12 @@
     function addEntry(foodName, portionStr, grams, nutrients) {
       entries.push({ foodName, portionStr, grams, nutrients, id: Date.now() });
 
-      goals.protein.value  += nutrients.protein;
-      goals.vitaminD.value += nutrients.vitaminD;
-      goals.calcium.value  += nutrients.calcium;
-      goals.sodium.value   += nutrients.sodium;
+      goals.protein.value   += nutrients.protein;
+      goals.vitaminD.value  += nutrients.vitaminD;
+      goals.calcium.value   += nutrients.calcium;
+      goals.magnesium.value += (nutrients.magnesium || 0);
+      goals.potassium.value += (nutrients.potassium || 0);
+      goals.sodium.value    += nutrients.sodium;
 
       saveToStorage();
       updateUI();
@@ -704,10 +715,12 @@
     function removeEntry(id) {
       const entry = entries.find(e => e.id === id);
       if (entry) {
-        goals.protein.value  -= entry.nutrients.protein;
-        goals.vitaminD.value -= entry.nutrients.vitaminD;
-        goals.calcium.value  -= entry.nutrients.calcium;
-        goals.sodium.value   -= entry.nutrients.sodium;
+        goals.protein.value   -= entry.nutrients.protein;
+        goals.vitaminD.value  -= entry.nutrients.vitaminD;
+        goals.calcium.value   -= entry.nutrients.calcium;
+        goals.magnesium.value -= (entry.nutrients.magnesium || 0);
+        goals.potassium.value -= (entry.nutrients.potassium || 0);
+        goals.sodium.value    -= entry.nutrients.sodium;
 
         entries.splice(entries.indexOf(entry), 1);
         saveToStorage();
@@ -826,7 +839,7 @@
           <div class="entry">
             <div>
               <div class="entry-name">${e.foodName}, ${e.portionStr}</div>
-              <div style="font-size: 11px; color: #999;">P: ${Math.round(e.nutrients.protein)}g | Ca: ${Math.round(e.nutrients.calcium)}mg | Na: ${Math.round(e.nutrients.sodium)}mg</div>
+              <div style="font-size: 11px; color: #999;">P: ${Math.round(e.nutrients.protein)}g | Ca: ${Math.round(e.nutrients.calcium)}mg | Mg: ${Math.round(e.nutrients.magnesium||0)}mg | K: ${Math.round(e.nutrients.potassium||0)}mg | Na: ${Math.round(e.nutrients.sodium)}mg</div>
             </div>
             <div class="entry-remove" onclick="removeEntry(${e.id})">✕</div>
           </div>
