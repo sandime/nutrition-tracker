@@ -444,7 +444,7 @@
     <div class="food-input-section">
       <div class="input-group">
         <input type="text" id="foodName" placeholder="Food (e.g., greek yogurt)" />
-        <input type="text" id="portion" placeholder="Portion (e.g., 1 cup)" />
+        <input type="text" id="portion" placeholder="Portion (e.g., 1 banana, 1 cup, 3 oz)" />
       </div>
       <div class="input-group">
         <button onclick="searchFood()" style="width: 100%;">Look up</button>
@@ -578,22 +578,15 @@
       const foodName = document.getElementById('foodName').value.trim();
       const portionStr = document.getElementById('portion').value.trim();
       const errorDiv = document.getElementById('foodError');
-      
+
       errorDiv.style.display = 'none';
-      
+
       if (!foodName || !portionStr) {
         errorDiv.textContent = 'Enter food and portion';
         errorDiv.style.display = 'block';
         return;
       }
-      
-      const grams = parsePortion(portionStr);
-      if (!grams) {
-        errorDiv.textContent = 'Portion not recognized. Try: "1 cup", "3.5 oz", "half cup"';
-        errorDiv.style.display = 'block';
-        return;
-      }
-      
+
       try {
         // Step 1: search for the food to get its fdcId
         const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&dataType=Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
@@ -609,7 +602,6 @@
         const firstResult = searchData.foods[0];
 
         // Step 2: fetch full food record for complete nutrient data (includes magnesium)
-        // Fall back to the abridged search result if the full fetch fails or returns no nutrients
         let foodData = firstResult;
         try {
           const fullResp = await fetch(`https://api.nal.usda.gov/fdc/v1/food/${firstResult.fdcId}?api_key=${USDA_API_KEY}`);
@@ -618,8 +610,32 @@
             foodData = fullData;
           }
         } catch (e) {
-          // full-food fetch failed — search data still has protein/calcium/sodium/potassium
           console.warn('[USDA] full food fetch failed, using abridged data', e);
+        }
+
+        // Step 3: resolve portion to grams
+        // Try standard unit lookup first; fall back to USDA foodPortions (e.g. "1 banana")
+        let grams = parsePortion(portionStr);
+        if (!grams && foodData.foodPortions && foodData.foodPortions.length) {
+          const lowerPortion = portionStr.toLowerCase().trim();
+          const count = parseFloat(lowerPortion) || 1;
+          // Try to match portion description (e.g. "medium", "large", "1 cup")
+          const stripped = lowerPortion.replace(/^\d+(\.\d+)?\s*/, '').trim();
+          let matched = foodData.foodPortions.find(p => {
+            const desc = (p.modifier || p.portionDescription || '').toLowerCase();
+            return desc.includes(stripped) || stripped.includes(desc.replace(/\(.*\)/, '').trim());
+          });
+          // Fall back to first "medium" entry, then just the first entry
+          if (!matched) matched = foodData.foodPortions.find(p => (p.modifier || '').toLowerCase().includes('medium'));
+          if (!matched) matched = foodData.foodPortions[0];
+          if (matched && matched.gramWeight) {
+            grams = Math.round(count * matched.gramWeight / (matched.amount || 1));
+          }
+        }
+        if (!grams) {
+          errorDiv.textContent = 'Portion not recognized. Try: "1 cup", "3.5 oz", "half cup", or "1 medium"';
+          errorDiv.style.display = 'block';
+          return;
         }
 
         const nutrients = extractNutrients(foodData, grams);
@@ -640,22 +656,26 @@
         protein: 0, vitaminD: 0, calcium: 0,
         magnesium: 0, potassium: 0, sodium: 0,
       };
+      const seen = new Set();
 
       (food.foodNutrients || []).forEach(item => {
         const name  = (item.nutrient && item.nutrient.name) || item.nutrientName || '';
         const value = item.amount !== undefined ? item.amount : (item.value || 0);
-        const per100g = value / 100 * grams;
 
-        if      (name.includes('Protein'))   nutrients.protein   += per100g;
-        else if (name.includes('Calcium'))   nutrients.calcium   += per100g;
-        else if (name.includes('Magnesium')) nutrients.magnesium += per100g;
-        else if (name.includes('Potassium')) nutrients.potassium += per100g;
-        else if (name.includes('Sodium'))    nutrients.sodium    += per100g;
-        else if (name.includes('Vitamin D')) nutrients.vitaminD  += per100g;
+        let key = null;
+        if      (name.includes('Protein'))   key = 'protein';
+        else if (name.includes('Calcium'))   key = 'calcium';
+        else if (name.includes('Magnesium')) key = 'magnesium';
+        else if (name.includes('Potassium')) key = 'potassium';
+        else if (name.includes('Sodium'))    key = 'sodium';
+        else if (name.includes('Vitamin D')) key = 'vitaminD';
+
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          nutrients[key] = value / 100 * grams;
+        }
       });
 
-      console.log('[USDA] names (first 8):', (food.foodNutrients || []).slice(0, 8).map(i => (i.nutrient && i.nutrient.name) || i.nutrientName || '?').join(' | '));
-      console.log('[USDA] extracted:', JSON.stringify(nutrients));
       return nutrients;
     }
     
