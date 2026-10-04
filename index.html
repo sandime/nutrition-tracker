@@ -241,6 +241,126 @@
       font-size: 13px;
     }
     
+    .summary-btn {
+      background: #555;
+      font-size: 13px;
+      padding: 0.5rem 1rem;
+      margin-top: 0.5rem;
+    }
+
+    .summary-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 100;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+      overflow-y: auto;
+    }
+
+    .summary-overlay.open { display: flex; }
+
+    .summary-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 2rem;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }
+
+    .summary-card h2 {
+      font-size: 20px;
+      color: #222;
+      margin-bottom: 0.25rem;
+    }
+
+    .summary-date {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 1.5rem;
+    }
+
+    .summary-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #999;
+      margin: 1.25rem 0 0.5rem;
+    }
+
+    .summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .summary-table th {
+      text-align: left;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #aaa;
+      padding: 0 0 0.4rem;
+      border-bottom: 1px solid #eee;
+    }
+
+    .summary-table td {
+      padding: 0.45rem 0;
+      border-bottom: 1px solid #f5f5f5;
+      color: #333;
+    }
+
+    .summary-table td:nth-child(2),
+    .summary-table td:nth-child(3) { text-align: right; color: #555; }
+
+    .summary-status { font-size: 11px; font-weight: 600; }
+    .summary-status.met   { color: #0ca30c; }
+    .summary-status.close { color: #fab219; }
+    .summary-status.over  { color: #ec835a; }
+    .summary-status.behind { color: #ec835a; }
+
+    .summary-food-list { list-style: none; font-size: 13px; }
+    .summary-food-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #f5f5f5;
+      gap: 1rem;
+    }
+    .summary-food-list .food-label { color: #333; }
+    .summary-food-list .food-macros { color: #999; font-size: 11px; white-space: nowrap; }
+
+    .summary-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    .summary-actions .print-btn {
+      background: #333;
+      flex: 1;
+    }
+
+    .summary-actions .close-btn {
+      background: none;
+      color: #999;
+      border: 1px solid #ddd;
+      flex: 0 0 auto;
+    }
+
+    @media print {
+      body > * { display: none !important; }
+      .summary-overlay { display: block !important; position: static !important;
+        background: none !important; padding: 0 !important; overflow: visible !important; }
+      .summary-card { box-shadow: none !important; padding: 0 !important;
+        border-radius: 0 !important; max-width: 100% !important; }
+      .summary-actions { display: none !important; }
+    }
+
     .error {
       color: #d32f2f;
       font-size: 12px;
@@ -312,7 +432,14 @@
     <header>
       <h1>Daily Nutrition</h1>
       <div class="date" id="today"></div>
+      <button class="summary-btn" onclick="showSummary()">Daily Summary</button>
     </header>
+
+    <div class="summary-overlay" id="summaryOverlay">
+      <div class="summary-card" id="summaryCard">
+        <!-- filled by showSummary() -->
+      </div>
+    </div>
     
     <div class="food-input-section">
       <div class="input-group">
@@ -599,6 +726,58 @@
       updateUI();
     }
     
+    function showSummary() {
+      const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      const nutrientRows = Object.entries(goals).map(([key, g]) => {
+        const label = key === 'vitaminD' ? 'Vitamin D' : key.charAt(0).toUpperCase() + key.slice(1);
+        const val   = Math.round(g.value * 10) / 10;
+        const status = getStatus(g.value, g.goal, g.maxValue);
+        const statusLabel = g.maxValue
+          ? (status === 'met' ? 'Within limit' : status === 'close' ? 'Near limit' : 'Over limit')
+          : (status === 'met' ? 'Goal met' : status === 'close' ? 'Almost there' : 'Below goal');
+        return `<tr>
+          <td>${label}</td>
+          <td>${val} ${g.unit}</td>
+          <td>${g.goal} ${g.unit}</td>
+          <td><span class="summary-status ${status}">${statusLabel}</span></td>
+        </tr>`;
+      }).join('');
+
+      const foodRows = entries.length === 0
+        ? '<li><span class="food-label" style="color:#999;font-style:italic;">No foods logged</span></li>'
+        : entries.map(e => `
+          <li>
+            <span class="food-label">${e.foodName}${e.portionStr && e.portionStr !== 'manual' ? ', ' + e.portionStr : ''}</span>
+            <span class="food-macros">P ${Math.round(e.nutrients.protein)}g · Ca ${Math.round(e.nutrients.calcium)}mg · Na ${Math.round(e.nutrients.sodium)}mg</span>
+          </li>`).join('');
+
+      document.getElementById('summaryCard').innerHTML = `
+        <h2>Daily Nutrition Summary</h2>
+        <div class="summary-date">${dateStr}</div>
+
+        <div class="summary-section-title">Nutrient Totals</div>
+        <table class="summary-table">
+          <thead><tr><th>Nutrient</th><th>Consumed</th><th>Goal</th><th>Status</th></tr></thead>
+          <tbody>${nutrientRows}</tbody>
+        </table>
+
+        <div class="summary-section-title">Foods Logged</div>
+        <ul class="summary-food-list">${foodRows}</ul>
+
+        <div class="summary-actions">
+          <button class="print-btn" onclick="window.print()">Print</button>
+          <button class="close-btn" onclick="closeSummary()">Close</button>
+        </div>
+      `;
+
+      document.getElementById('summaryOverlay').classList.add('open');
+    }
+
+    function closeSummary() {
+      document.getElementById('summaryOverlay').classList.remove('open');
+    }
+
     function getStatus(current, goal, isMax = false) {
       const percent = (current / goal) * 100;
       
