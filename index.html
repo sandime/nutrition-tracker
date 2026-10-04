@@ -641,12 +641,9 @@
         magnesium: 0, potassium: 0, sodium: 0,
       };
 
-      console.log('[USDA] foodNutrients sample:', (food.foodNutrients || []).slice(0, 3));
       (food.foodNutrients || []).forEach(item => {
-        // Full food endpoint: { nutrient: { name, id }, amount }
-        // Search endpoint fallback: { nutrientName, value }
         const name  = (item.nutrient && item.nutrient.name) || item.nutrientName || '';
-        const value = (item.amount !== undefined ? item.amount : null) ?? item.value ?? 0;
+        const value = item.amount !== undefined ? item.amount : (item.value || 0);
         const per100g = value / 100 * grams;
 
         if      (name.includes('Protein'))   nutrients.protein   += per100g;
@@ -657,6 +654,8 @@
         else if (name.includes('Vitamin D')) nutrients.vitaminD  += per100g;
       });
 
+      console.log('[USDA] names (first 8):', (food.foodNutrients || []).slice(0, 8).map(i => (i.nutrient && i.nutrient.name) || i.nutrientName || '?').join(' | '));
+      console.log('[USDA] extracted:', JSON.stringify(nutrients));
       return nutrients;
     }
     
