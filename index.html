@@ -606,11 +606,21 @@
           return;
         }
 
-        // Step 2: fetch full food data so we get ALL nutrients (including magnesium)
-        const fdcId = searchData.foods[0].fdcId;
-        const foodUrl = `https://api.nal.usda.gov/fdc/v1/food/${fdcId}?api_key=${USDA_API_KEY}`;
-        const foodResp = await fetch(foodUrl);
-        const foodData = await foodResp.json();
+        const firstResult = searchData.foods[0];
+
+        // Step 2: fetch full food record for complete nutrient data (includes magnesium)
+        // Fall back to the abridged search result if the full fetch fails or returns no nutrients
+        let foodData = firstResult;
+        try {
+          const fullResp = await fetch(`https://api.nal.usda.gov/fdc/v1/food/${firstResult.fdcId}?api_key=${USDA_API_KEY}`);
+          const fullData = await fullResp.json();
+          if (fullData.foodNutrients && fullData.foodNutrients.length) {
+            foodData = fullData;
+          }
+        } catch (e) {
+          // full-food fetch failed — search data still has protein/calcium/sodium/potassium
+          console.warn('[USDA] full food fetch failed, using abridged data', e);
+        }
 
         const nutrients = extractNutrients(foodData, grams);
         addEntry(foodName, portionStr, grams, nutrients);
@@ -631,11 +641,12 @@
         magnesium: 0, potassium: 0, sodium: 0,
       };
 
+      console.log('[USDA] foodNutrients sample:', (food.foodNutrients || []).slice(0, 3));
       (food.foodNutrients || []).forEach(item => {
         // Full food endpoint: { nutrient: { name, id }, amount }
         // Search endpoint fallback: { nutrientName, value }
         const name  = (item.nutrient && item.nutrient.name) || item.nutrientName || '';
-        const value = item.amount ?? item.value ?? 0;
+        const value = (item.amount !== undefined ? item.amount : null) ?? item.value ?? 0;
         const per100g = value / 100 * grams;
 
         if      (name.includes('Protein'))   nutrients.protein   += per100g;
