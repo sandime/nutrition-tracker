@@ -589,7 +589,7 @@
 
       try {
         // Step 1: search for the food to get its fdcId
-        const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&dataType=Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
+        const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=5&dataType=Foundation,SR%20Legacy&api_key=${USDA_API_KEY}`;
         const searchResp = await fetch(searchUrl);
         const searchData = await searchResp.json();
 
@@ -599,12 +599,15 @@
           return;
         }
 
-        const firstResult = searchData.foods[0];
+        // Prefer a "raw" result over processed/prepared forms
+        const rawResult = searchData.foods.find(f =>
+          /\braw\b/i.test(f.description)
+        ) || searchData.foods[0];
 
         // Step 2: fetch full food record for complete nutrient data (includes magnesium)
-        let foodData = firstResult;
+        let foodData = rawResult;
         try {
-          const fullResp = await fetch(`https://api.nal.usda.gov/fdc/v1/food/${firstResult.fdcId}?api_key=${USDA_API_KEY}`);
+          const fullResp = await fetch(`https://api.nal.usda.gov/fdc/v1/food/${rawResult.fdcId}?api_key=${USDA_API_KEY}`);
           const fullData = await fullResp.json();
           if (fullData.foodNutrients && fullData.foodNutrients.length) {
             foodData = fullData;
@@ -612,6 +615,7 @@
         } catch (e) {
           console.warn('[USDA] full food fetch failed, using abridged data', e);
         }
+        const usdaDesc = foodData.description || rawResult.description || '';
 
         // Step 3: resolve portion to grams
         // Try standard unit lookup first; fall back to USDA foodPortions (e.g. "1 banana")
@@ -639,7 +643,7 @@
         }
 
         const nutrients = extractNutrients(foodData, grams);
-        addEntry(foodName, portionStr, grams, nutrients);
+        addEntry(foodName, portionStr, grams, nutrients, usdaDesc);
 
         document.getElementById('foodName').value = '';
         document.getElementById('portion').value = '';
@@ -737,8 +741,8 @@
       } catch (e) { console.error('Failed to restore data', e); }
     }
 
-    function addEntry(foodName, portionStr, grams, nutrients) {
-      entries.push({ foodName, portionStr, grams, nutrients, id: Date.now() });
+    function addEntry(foodName, portionStr, grams, nutrients, usdaDesc) {
+      entries.push({ foodName, portionStr, grams, nutrients, usdaDesc: usdaDesc || '', id: Date.now() });
 
       goals.protein.value   += nutrients.protein;
       goals.vitaminD.value  += nutrients.vitaminD;
@@ -878,6 +882,7 @@
           <div class="entry">
             <div>
               <div class="entry-name">${e.foodName}, ${e.portionStr}</div>
+              ${e.usdaDesc ? `<div style="font-size: 10px; color: #bbb; margin-bottom: 2px;">source: ${e.usdaDesc}</div>` : ''}
               <div style="font-size: 11px; color: #999;">P: ${Math.round(e.nutrients.protein)}g | Ca: ${Math.round(e.nutrients.calcium)}mg | Mg: ${Math.round(e.nutrients.magnesium||0)}mg | K: ${Math.round(e.nutrients.potassium||0)}mg | Na: ${Math.round(e.nutrients.sodium)}mg</div>
             </div>
             <div class="entry-remove" onclick="removeEntry(${e.id})">✕</div>
