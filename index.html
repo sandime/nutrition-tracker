@@ -595,48 +595,57 @@
       }
       
       try {
-        const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&api_key=${USDA_API_KEY}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (!data.foods || !data.foods.length) {
+        // Step 1: search for the food to get its fdcId
+        const searchUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(foodName)}&pageSize=1&api_key=${USDA_API_KEY}`;
+        const searchResp = await fetch(searchUrl);
+        const searchData = await searchResp.json();
+
+        if (!searchData.foods || !searchData.foods.length) {
           errorDiv.textContent = 'Food not found. Try a simpler name or different spelling.';
           errorDiv.style.display = 'block';
           return;
         }
-        
-        const food = data.foods[0];
-        const nutrients = extractNutrients(food, grams);
-        
+
+        // Step 2: fetch full food data so we get ALL nutrients (including magnesium)
+        const fdcId = searchData.foods[0].fdcId;
+        const foodUrl = `https://api.nal.usda.gov/fdc/v1/food/${fdcId}?api_key=${USDA_API_KEY}`;
+        const foodResp = await fetch(foodUrl);
+        const foodData = await foodResp.json();
+
+        const nutrients = extractNutrients(foodData, grams);
         addEntry(foodName, portionStr, grams, nutrients);
-        
+
         document.getElementById('foodName').value = '';
         document.getElementById('portion').value = '';
-        
+
       } catch (error) {
         errorDiv.textContent = 'API error. Make sure you have a valid USDA API key.';
         errorDiv.style.display = 'block';
         console.error(error);
       }
     }
-    
+
     function extractNutrients(food, grams) {
       const nutrients = {
         protein: 0, vitaminD: 0, calcium: 0,
         magnesium: 0, potassium: 0, sodium: 0,
       };
 
-      food.foodNutrients.forEach(nutrient => {
-        const per100g = (nutrient.value || 0) / 100 * grams;
-        const n = nutrient.nutrientName;
-        if      (n.includes('Protein'))   nutrients.protein   += per100g;
-        else if (n.includes('Calcium'))   nutrients.calcium   += per100g;
-        else if (n.includes('Magnesium')) nutrients.magnesium += per100g;
-        else if (n.includes('Potassium')) nutrients.potassium += per100g;
-        else if (n.includes('Sodium'))    nutrients.sodium    += per100g;
-        else if (n.includes('Vitamin D')) nutrients.vitaminD  += per100g;
+      (food.foodNutrients || []).forEach(item => {
+        // Full food endpoint: { nutrient: { name, id }, amount }
+        // Search endpoint fallback: { nutrientName, value }
+        const name  = (item.nutrient && item.nutrient.name) || item.nutrientName || '';
+        const value = item.amount ?? item.value ?? 0;
+        const per100g = value / 100 * grams;
+
+        if      (name.includes('Protein'))   nutrients.protein   += per100g;
+        else if (name.includes('Calcium'))   nutrients.calcium   += per100g;
+        else if (name.includes('Magnesium')) nutrients.magnesium += per100g;
+        else if (name.includes('Potassium')) nutrients.potassium += per100g;
+        else if (name.includes('Sodium'))    nutrients.sodium    += per100g;
+        else if (name.includes('Vitamin D')) nutrients.vitaminD  += per100g;
       });
-      
+
       return nutrients;
     }
     
