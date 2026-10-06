@@ -599,10 +599,15 @@
           return;
         }
 
-        // Prefer a "raw" result over processed/prepared forms
-        const rawResult = searchData.foods.find(f =>
-          /\braw\b/i.test(f.description)
-        ) || searchData.foods[0];
+        // Filter out combination foods (e.g. "milk and crackers") unless user asked for them
+        const queryHasAnd = /\band\b/i.test(foodName);
+        const candidates = queryHasAnd
+          ? searchData.foods
+          : searchData.foods.filter(f => !/\band\b/i.test(f.description));
+        const pool = candidates.length ? candidates : searchData.foods;
+
+        // Among remaining, prefer "raw" over processed/prepared forms
+        const rawResult = pool.find(f => /\braw\b/i.test(f.description)) || pool[0];
 
         // Step 2: fetch full food record for complete nutrient data (includes magnesium)
         let foodData = rawResult;
