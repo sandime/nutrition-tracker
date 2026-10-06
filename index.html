@@ -606,8 +606,17 @@
           : searchData.foods.filter(f => !/\band\b/i.test(f.description));
         const pool = candidates.length ? candidates : searchData.foods;
 
-        // Among remaining, prefer "raw" over processed/prepared forms
-        const rawResult = pool.find(f => /\braw\b/i.test(f.description)) || pool[0];
+        // Score each result: prefer descriptions that START with the first query word,
+        // then prefer "raw", then fall back to first
+        const firstWord = foodName.trim().split(/\s+/)[0].toLowerCase();
+        function scoreFood(f) {
+          const desc = f.description.toLowerCase();
+          let score = 0;
+          if (desc.startsWith(firstWord)) score += 2;
+          if (/\braw\b/i.test(desc))      score += 1;
+          return score;
+        }
+        const rawResult = pool.slice().sort((a, b) => scoreFood(b) - scoreFood(a))[0];
 
         // Step 2: fetch full food record for complete nutrient data (includes magnesium)
         let foodData = rawResult;
